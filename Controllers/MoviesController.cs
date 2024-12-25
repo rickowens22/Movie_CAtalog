@@ -1,49 +1,63 @@
 using Microsoft.AspNetCore.Mvc;
-using MovieCatalog.Models;
-using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Text.Json;
+using MovieCatalog.Models;
 
 namespace MovieCatalog.Controllers
 {
     public class MoviesController : Controller
     {
-        // Статический список фильмов, чтобы изменения сохранялись между запросами
-        private static List<Movie> movies = new List<Movie>
-        {
-            new Movie { Id = 1, Title = "The Shawshank Redemption", Genre = "Drama", ReleaseDate = new DateTime(1994,9,23), Price = 9.99m },
-            new Movie { Id = 2, Title = "The Godfather", Genre = "Crime", ReleaseDate = new DateTime(1972,3,24), Price = 14.99m },
-            new Movie { Id = 3, Title = "The Dark Knight", Genre = "Action", ReleaseDate = new DateTime(2008,7,18), Price = 12.99m }
-        };
+        private readonly string filePath;
+        private List<Movie> movies;
 
-        // Отображение списка фильмов
+        public MoviesController()
+        {
+            var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "MovieCatalog");
+            if (!Directory.Exists(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            filePath = Path.Combine(directory, "movies.json");
+
+            if (System.IO.File.Exists(filePath))
+            {
+                var jsonData = System.IO.File.ReadAllText(filePath);
+                movies = JsonSerializer.Deserialize<List<Movie>>(jsonData) ?? new List<Movie>();
+            }
+            else
+            {
+                movies = new List<Movie>();
+                SaveToFile();
+            }
+        }
+
         public IActionResult Index()
         {
             return View(movies);
         }
 
-        // GET: Создание фильма (форма)
         [HttpGet]
         public IActionResult Create()
         {
             return View();
         }
 
-        // POST: Создание фильма (сохранение)
         [HttpPost]
         public IActionResult Create(Movie movie)
         {
             if (ModelState.IsValid)
             {
-                int newId = movies.Any() ? movies.Max(m => m.Id) + 1 : 1;
-                movie.Id = newId;
+                movie.Id = movies.Any() ? movies.Max(m => m.Id) + 1 : 1;
                 movies.Add(movie);
+                SaveToFile();
                 return RedirectToAction("Index");
             }
             return View(movie);
         }
 
-        // GET: Редактирование фильма (форма)
         [HttpGet]
         public IActionResult Edit(int id)
         {
@@ -52,7 +66,6 @@ namespace MovieCatalog.Controllers
             return View(movie);
         }
 
-        // POST: Редактирование фильма (сохранение)
         [HttpPost]
         public IActionResult Edit(Movie movie)
         {
@@ -65,13 +78,12 @@ namespace MovieCatalog.Controllers
                 existing.Genre = movie.Genre;
                 existing.ReleaseDate = movie.ReleaseDate;
                 existing.Price = movie.Price;
-
+                SaveToFile();
                 return RedirectToAction("Index");
             }
             return View(movie);
         }
 
-        // GET: Удаление фильма (подтверждение)
         [HttpGet]
         public IActionResult Delete(int id)
         {
@@ -80,14 +92,21 @@ namespace MovieCatalog.Controllers
             return View(movie);
         }
 
-        // POST: Удаление фильма
         [HttpPost, ActionName("Delete")]
         public IActionResult DeleteConfirmed(int id)
         {
             var movie = movies.FirstOrDefault(m => m.Id == id);
             if (movie == null) return NotFound();
+
             movies.Remove(movie);
+            SaveToFile();
             return RedirectToAction("Index");
+        }
+
+        private void SaveToFile()
+        {
+            var jsonData = JsonSerializer.Serialize(movies, new JsonSerializerOptions { WriteIndented = true });
+            System.IO.File.WriteAllText(filePath, jsonData);
         }
     }
 }
